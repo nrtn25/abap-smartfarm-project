@@ -1,1 +1,0 @@
-# abap-smartfarm-project
