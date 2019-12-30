@@ -1,0 +1,2157 @@
+*&---------------------------------------------------------------------*
+*& Include          ZAPSR0010_F
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*& Form SELECT_DATA
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM SELECT_DATA .
+
+DEFINE _STYLE_ENABLED.
+GS_STYLE-FIELDNAME = &1.
+GS_STYLE-STYLE = CL_GUI_ALV_GRID=>MC_STYLE_ENABLED.
+INSERT GS_STYLE INTO TABLE GT_STYLE.
+END-OF-DEFINITION.
+
+DEFINE _STYLE_DISABLED.
+GS_STYLE-FIELDNAME = &1.
+GS_STYLE-STYLE = CL_GUI_ALV_GRID=>MC_STYLE_DISABLED.
+INSERT GS_STYLE INTO TABLE GT_STYLE.
+END-OF-DEFINITION.
+
+SELECT C~ENAME, A~ODATS, A~HCODE, A~OINST, D~INSNO, D~SEDATE, A~ONUMB, A~OTURN, D~ENUMB, E~ENAME AS ENAME1, G~CNAME
+INTO CORRESPONDING FIELDS OF TABLE @GT_DISPLAY
+
+FROM ZASDT0060 AS A LEFT OUTER JOIN ZASDT0050 AS B
+ON B~ONUMB EQ A~ONUMB
+LEFT OUTER JOIN ZAPST0020 AS C
+ON C~ENUMB EQ B~ENUMB
+LEFT OUTER JOIN ZAPST0050 AS D
+ON D~INSNO EQ A~INSNO
+LEFT OUTER JOIN ZAPST0020 AS E
+ON E~ENUMB EQ D~ENUMB
+LEFT OUTER JOIN ZASDT0010 AS G
+ON G~CNUMB EQ B~CNUMB
+WHERE B~ODAYA IN @S_ODAYA
+AND A~ONUMB IN @S_ONUMB
+ORDER BY A~ONUMB DESCENDING,
+A~OTURN DESCENDING.
+
+DATA : LV_CHECK, LV_ENABLE.
+
+LOOP AT GT_DISPLAY.
+CLEAR : GS_STYLE, GT_STYLE, GT_STYLE[].
+
+IF GT_DISPLAY-INSNO IS NOT INITIAL.
+LV_CHECK = 'X'.
+_STYLE_DISABLED: 'ENUMB'.
+GT_DISPLAY-STYLE[] = GT_STYLE[].
+*      MODIFY GT_DISPLAY.
+ELSE.
+_STYLE_ENABLED: 'ENUMB'.
+GT_DISPLAY-STYLE[] = GT_STYLE[].
+*      MODIFY GT_DISPLAY.
+LV_CHECK = ''.
+LV_ENABLE = 'X'.
+ENDIF.
+
+IF GT_DISPLAY-OINST EQ 'C'.
+GT_DISPLAY-ICON = ICON_LED_GREEN.
+ELSEIF GT_DISPLAY-OINST EQ 'B'.
+GT_DISPLAY-ICON = ICON_LED_YELLOW.
+ELSE.
+GT_DISPLAY-ICON = ICON_LED_RED.
+ENDIF.
+MODIFY GT_DISPLAY.
+
+
+ENDLOOP.
+*PERFORM REFRESH_GRID_0100.
+
+*  DATA: BEGIN OF LT_ICON OCCURS 0,
+*          SDATE TYPE ZAPST0060-SDATE,
+*          EDATE TYPE ZAPST0060-EDATE,
+*        END OF LT_ICON.
+*DATA : LV_OINST TYPE ZASDT0060-OINST.
+*
+*  SELECT OINST
+*    INTO CORRESPONDING FIELDS OF @LV_OINST
+*    FROM ZASDT0060
+*    WHERE INSNO EQ @GT_DISPLAY-INSNO.
+
+*    IF GT_DISPLAY-OINST EQ 'C'.
+*      GT_DISPLAY-ICON = ICON_LED_GREEN.
+*    ELSEIF GT_DISPLAY-OINST EQ 'B'.
+*      GT_DISPLAY-ICON = ICON_LED_YELLOW.
+*    ELSE.
+*      GT_DISPLAY-ICON = ICON_LED_RED.
+*    ENDIF.
+
+
+
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form CREATE_INSTANCE_0100
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM CREATE_INSTANCE_0100 .
+
+CREATE OBJECT GR_CON1
+EXPORTING
+CONTAINER_NAME = GV_CONTAINER.
+
+CREATE OBJECT GR_GRID1
+EXPORTING
+I_PARENT = GR_CON1.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form APPEND_FIELDCAT_0100
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM APPEND_FIELDCAT_0100 .
+
+PERFORM GET_FIELDCATLOG_DATA .
+PERFORM MODIFY_FIELDCATLOG_DATA.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form GET_FIELDCATLOG_DATA
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*&      --> LV_DYNNR
+*&---------------------------------------------------------------------*
+FORM GET_FIELDCATLOG_DATA .
+
+DATA: LT_FIELDCAT TYPE KKBLO_T_FIELDCAT.
+DATA: LV_TABNAME TYPE DD02L-TABNAME.
+
+LV_TABNAME = 'GT_DISPLAY'.
+
+CALL FUNCTION 'K_KKB_FIELDCAT_MERGE'
+EXPORTING
+I_CALLBACK_PROGRAM = SY-REPID
+I_TABNAME = LV_TABNAME "프로그램내 ITAB
+*     I_STRUCNAME            = 'ZEDU00_EX5ST_1'
+I_BYPASSING_BUFFER = ABAP_TRUE
+I_INCLNAME = SY-REPID
+CHANGING
+CT_FIELDCAT = LT_FIELDCAT[]
+EXCEPTIONS
+INCONSISTENT_INTERFACE = 1
+OTHERS = 2.
+
+IF SY-SUBRC EQ 0.
+"-- Trasnfer LVC.
+CALL FUNCTION 'LVC_TRANSFER_FROM_KKBLO'
+EXPORTING
+IT_FIELDCAT_KKBLO = LT_FIELDCAT[]
+IMPORTING
+ET_FIELDCAT_LVC = GT_FIELDCAT[]
+EXCEPTIONS
+IT_DATA_MISSING = 1.
+ELSE.
+
+" Error Fieldcatalog merge!!
+MESSAGE E000 WITH 'Error Fieldcatalog merge!!'.
+
+ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form REGIST_ALV_EVENT_0100
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*&      --> GR_GRID1
+*&---------------------------------------------------------------------*
+FORM REGIST_ALV_EVENT_0100 USING PR_GRID TYPE REF TO CL_GUI_ALV_GRID.
+
+* REGISTER EVENT
+CALL METHOD PR_GRID->REGISTER_EDIT_EVENT
+EXPORTING
+I_EVENT_ID = CL_GUI_ALV_GRID=>MC_EVT_MODIFIED.
+
+*  CALL METHOD PR_GRID->SET_READY_FOR_INPUT
+*    EXPORTING
+*      I_READY_FOR_INPUT = 1.
+
+**-- GR_EVENT_RECEIVER
+IF GR_EVENT_RECEIVER1 IS INITIAL.
+CREATE OBJECT GR_EVENT_RECEIVER1.
+ENDIF.
+*
+** Handler Event
+SET HANDLER:
+*    GR_EVENT_RECEIVER->HANDLE_TOOLBAR       FOR ALL INSTANCES,
+GR_EVENT_RECEIVER1->HANDLE_DATA_CHANGED FOR PR_GRID,
+*    GR_EVENT_RECEIVER->HANDLE_DATA_CHANGED_FINISHED
+*      FOR ALL INSTANCES,
+*    GR_EVENT_RECEIVER1->HANDLE_USER_COMMAND  FOR PR_GRID,
+GR_EVENT_RECEIVER1->HANDLE_HOTSPOT_CLICK FOR PR_GRID.
+*    GR_EVENT_RECEIVER->HANDLE_DOUBLE_CLICK  FOR ALL INSTANCES.
+*    GR_EVENT_RECEIVER->HANDLE_ONF4          FOR ALL INSTANCES.
+
+*  PERFORM REGI_F4.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form DISPLAY_ALV_GRID_0100
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM DISPLAY_ALV_GRID_0100 .
+
+GS_VARIANT-REPORT = SY-REPID.
+GV_SAVE = 'A'.
+
+"*-- Build field catalog for the alv control
+CALL METHOD GR_GRID1->SET_TABLE_FOR_FIRST_DISPLAY
+EXPORTING
+I_DEFAULT = ABAP_TRUE
+IS_LAYOUT = GS_LAYOUT
+IS_VARIANT = GS_VARIANT
+I_SAVE = GV_SAVE
+IT_TOOLBAR_EXCLUDING = GT_EXCLUDE
+CHANGING
+IT_FIELDCATALOG = GT_FIELDCAT
+IT_SORT = GT_SORT
+IT_OUTTAB = GT_DISPLAY[]
+EXCEPTIONS
+INVALID_PARAMETER_COMBINATION = 1
+PROGRAM_ERROR = 2
+TOO_MANY_LINES = 3.
+
+IF SY-SUBRC NE 0.
+MESSAGE E000(0K) WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+ENDIF.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form REFRESH_GRID_0100
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM REFRESH_GRID_0100 .
+
+GS_STABLE-ROW = ABAP_TRUE. "Row
+GS_STABLE-COL = ABAP_TRUE. "column
+
+CALL METHOD GR_GRID1->REFRESH_TABLE_DISPLAY
+EXPORTING
+IS_STABLE = GS_STABLE
+I_SOFT_REFRESH = ABAP_TRUE.
+
+CALL METHOD CL_GUI_CFW=>FLUSH.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form MODIFY_FIELDCATLOG_DATA
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM MODIFY_FIELDCATLOG_DATA .
+
+DATA: LV_TEXT(50).
+
+"--- Change Fieldcat.
+LOOP AT GT_FIELDCAT INTO GS_FIELDCAT.
+CLEAR: LV_TEXT.
+
+"-- Change fieldcat Attribute
+CASE GS_FIELDCAT-FIELDNAME.
+WHEN 'ENAME'.
+LV_TEXT = TEXT-F01.
+GS_FIELDCAT-KEY = 'X'.
+WHEN 'ODATS'.
+LV_TEXT = TEXT-F02.
+*        GS_FIELDCAT-KEY = 'X'.
+WHEN 'SEDATE'.
+LV_TEXT = TEXT-F32.
+WHEN 'HCODE'.
+LV_TEXT = TEXT-F03.
+*        GS_FIELDCAT-KEY = 'X'.
+
+WHEN 'OADDR'.
+LV_TEXT = TEXT-F05.
+GS_FIELDCAT-COL_OPT = ' '.
+WHEN 'ONUMB'.
+LV_TEXT = TEXT-F09.
+*        GS_FIELDCAT-NO_OUT = 'X'.
+WHEN 'OTURN'.
+LV_TEXT = TEXT-F22.
+*        GS_FIELDCAT-NO_OUT = 'X'.
+WHEN 'CNAME'.
+LV_TEXT = TEXT-F30.
+*        GS_FIELDCAT-NO_OUT = 'X'.
+WHEN 'INSNO'.
+LV_TEXT = TEXT-F06.
+GS_FIELDCAT-HOTSPOT = 'X'.
+WHEN 'ENUMB'.
+LV_TEXT = TEXT-F08.
+GS_FIELDCAT-EDIT = 'X'.
+GS_FIELDCAT-REF_FIELD = 'ENUMB'.
+GS_FIELDCAT-REF_TABLE = 'ZAPST0050'.
+GS_FIELDCAT-F4AVAILABL = 'X'.
+WHEN 'ENAME1'.
+LV_TEXT = TEXT-F07.
+WHEN 'ICON'.
+LV_TEXT = TEXT-F33.
+GS_FIELDCAT-ICON = 'X'. "
+
+WHEN OTHERS.
+GS_FIELDCAT-NO_OUT = ABAP_TRUE.
+ENDCASE.
+"Column Optimizer
+GS_FIELDCAT-COL_OPT = ABAP_TRUE.
+
+
+"-- Common attribute
+IF LV_TEXT IS NOT INITIAL.
+GS_FIELDCAT-COLTEXT = LV_TEXT.
+GS_FIELDCAT-SCRTEXT_L = LV_TEXT.
+GS_FIELDCAT-SCRTEXT_M = LV_TEXT.
+GS_FIELDCAT-SCRTEXT_S = LV_TEXT.
+ENDIF.
+
+MODIFY GT_FIELDCAT FROM GS_FIELDCAT.
+GS_FIELDCAT-COL_OPT = ABAP_TRUE.
+ENDLOOP.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form EVENT_TOOLBAR
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*&      --> E_OBJECT
+*&      --> E_INTERACTIVE
+*&      --> SENDER
+*&---------------------------------------------------------------------*
+FORM EVENT_TOOLBAR USING PR_OBJECT TYPE REF TO CL_ALV_EVENT_TOOLBAR_SET
+PV_INTERACTIVE TYPE CHAR01
+PR_SENDER TYPE REF TO CL_GUI_ALV_GRID.
+
+** - Prefix #¤## - Form Parameter
+**   1. PT_  : Internal Table or Ranges
+**   2. PS_  : Structure
+**   3. PV_  : Variables
+**   4. PR_ : Reference Variables
+*
+** - BUTTON TYPE - BTYPE.
+**  0 버튼(일반)
+**  1 메뉴 및 기본 버튼
+**  2 메뉴
+**  3 분리자
+**  4 라디오 버튼
+**  5 체크박스
+**  6 메뉴 엔트리
+*
+CASE PR_SENDER.
+WHEN GR_GRID2.
+"ADD_BUTTON : OBJECT, BTYPE, FUNC, ICON, INFO, TEXT, DISABLE
+PERFORM ADD_BUTTON
+USING: PR_OBJECT '3' SPACE SPACE SPACE SPACE SPACE. "분리자
+
+PERFORM ADD_BUTTON
+USING: PR_OBJECT '0' '&SAVEEE' ICON_PROSHARE TEXT-BT1
+TEXT-BT1 SPACE.
+
+"ADD_BUTTON : OBJECT, BTYPE, FUNC, ICON, INFO, TEXT, DISABLE
+PERFORM ADD_BUTTON
+USING: PR_OBJECT '3' SPACE SPACE SPACE SPACE SPACE. "분리자
+
+PERFORM ADD_BUTTON
+USING: PR_OBJECT '0' '&SCH' ICON_TOGGLE_DISPLAY_CHANGE TEXT-BT2
+TEXT-BT2 SPACE.
+
+*      "ADD_BUTTON : OBJECT, BTYPE, FUNC, ICON, INFO, TEXT, DISABLE
+*      PERFORM ADD_BUTTON
+*      USING: PR_OBJECT '3' SPACE SPACE SPACE SPACE SPACE.  "분리자
+*
+*      PERFORM ADD_BUTTON
+*      USING: PR_OBJECT '0' '&REFRSH' ICON_REFRESH  TEXT-BT3
+*      TEXT-BT3 SPACE.
+
+WHEN OTHERS.
+ENDCASE.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form ADD_BUTTON
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*&      --> PR_OBJECT
+*&      --> P_
+*&      --> SPACE
+*&      --> SPACE
+*&      --> SPACE
+*&      --> SPACE
+*&      --> SPACE
+*&---------------------------------------------------------------------*
+FORM ADD_BUTTON USING PR_OBJECT TYPE REF TO CL_ALV_EVENT_TOOLBAR_SET
+PV_BTYPE
+PV_FUNC
+PV_ICON
+PV_INFO
+PV_TEXT
+PV_DISA.
+
+DATA: LS_BUTTON TYPE STB_BUTTON,
+LS_BTNMNU TYPE STB_BTNMNU,
+
+LT_BUTTON TYPE TTB_BUTTON,
+LT_BTNMNU TYPE TTB_BTNMNU.
+
+CLEAR LS_BUTTON.
+LS_BUTTON-BUTN_TYPE = PV_BTYPE.
+LS_BUTTON-FUNCTION = PV_FUNC.
+LS_BUTTON-ICON = PV_ICON.
+LS_BUTTON-QUICKINFO = PV_INFO.
+
+LS_BUTTON-TEXT = PV_TEXT.
+LS_BUTTON-DISABLED = PV_DISA.
+
+APPEND LS_BUTTON TO PR_OBJECT->MT_TOOLBAR.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form CHECK_DATA
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM CHECK_DATA .
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form POPUP_TO_CONFIRM
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*&      --> TEXT_PT1
+*&      --> TEXT_QT1
+*&---------------------------------------------------------------------*
+FORM POPUP_TO_CONFIRM USING PV_TITLE
+PV_QUEST.
+"-- call popup
+CALL FUNCTION 'POPUP_TO_CONFIRM' "팝업만드는 펑션
+EXPORTING
+TITLEBAR = PV_TITLE "TEXT-PT1
+*     DIAGNOSE_OBJECT             = ' '
+TEXT_QUESTION = PV_QUEST "TEXT-QT1
+*     TEXT_BUTTON_1  = 'Ja'(001)
+*     ICON_BUTTON_1  = ' '
+*     TEXT_BUTTON_2  = 'Nein'(002)
+*     ICON_BUTTON_2  = ' '
+*     DEFAULT_BUTTON = '1'
+*     DISPLAY_CANCEL_BUTTON       = 'X'
+*     USERDEFINED_F1_HELP         = ' '
+*     START_COLUMN   = 25
+*     START_ROW      = 6
+*     POPUP_TYPE     =
+*     IV_QUICKINFO_BUTTON_1       = ' '
+*     IV_QUICKINFO_BUTTON_2       = ' '
+IMPORTING
+ANSWER = GV_ANSWER
+*   TABLES
+*     PARAMETER      =
+EXCEPTIONS
+TEXT_NOT_FOUND = 1
+OTHERS = 2.
+IF SY-SUBRC <> 0.
+MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+ENDIF.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form EVENT_USER_COMMAND
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*&      --> E_UCOMM
+*&      --> SENDER
+*&---------------------------------------------------------------------*
+FORM EVENT_USER_COMMAND USING PV_UCOMM TYPE SY-UCOMM
+PR_SENDER TYPE REF TO CL_GUI_ALV_GRID.
+
+CASE PR_SENDER.
+WHEN GR_GRID2.
+CASE PV_UCOMM.
+WHEN '&SAVEEE'.
+
+DATA : LS_ZAPST0060 TYPE ZAPST0060. "설치아이템
+DATA : LT_ZAPST0060 TYPE TABLE OF ZAPST0060.
+DATA : LV_FLUG TYPE C.
+*          LV_FLUG = ' '.
+*
+*          SELECT *
+*            INTO CORRESPONDING FIELDS OF TABLE @LT_ZAPST0060
+*            FROM  ZAPST0060
+*            WHERE INSNO EQ @GT_ASSIGN-INSNO.
+*
+*
+*
+*          LOOP AT GT_ASSIGN WHERE ENUMB IS NOT INITIAL AND EDATE IS INITIAL.
+*            LOOP AT LT_ZAPST0060 INTO LS_ZAPST0060
+*              WHERE INSNO = GT_ASSIGN-INSNO AND SEQ = GT_ASSIGN-SEQ .
+*
+*
+*              MOVE-CORRESPONDING GT_ASSIGN TO LS_ZAPST0060.
+*            MODIFY LT_ZAPST0060 FROM LS_ZAPST0060.
+*            ENDLOOP.
+*          ENDLOOP.
+*          MODIFY ZAPST0060 FROM TABLE LT_ZAPST0060.
+*
+**          LOOP AT LT_ZAPST0060  INTO LS_ZAPST0060.
+**      LS_ZAPST0060-INSNO = GT_ASSIGN-INSNO.
+**      MODIFY LT_ZAPST0060 FROM LS_ZAPST0060.
+**          ENDLOOP.
+*
+*          MODIFY ZAPST0060 FROM TABLE LT_ZAPST0060. "설치아이템
+
+LOOP AT GT_ASSIGN. "원래있던 로직,,5줄,,
+MOVE-CORRESPONDING GT_ASSIGN TO LS_ZAPST0060.
+APPEND LS_ZAPST0060 TO LT_ZAPST0060.
+ENDLOOP.
+MODIFY ZAPST0060 FROM TABLE LT_ZAPST0060.
+
+
+IF GT_ASSIGN IS NOT INITIAL.
+IF GV_FLUG IS NOT INITIAL.
+MESSAGE I000. "저장완료
+ELSE.
+MESSAGE I004.
+ENDIF.
+ELSE.
+MESSAGE I006. "저장할데이터없슴
+ENDIF.
+
+CLEAR: LS_ZAPST0060, LT_ZAPST0060, GV_FLUG.
+
+***************************************************
+
+WHEN '&SCH'.
+*          DATA: LV_FLUG TYPE C.
+
+CLEAR : GS_STYLE-STYLE, GT_ENUMB, GT_ENUMB[].
+
+*          LOOP AT GT_ASSIGN.
+*            GT_STYLE[] = GT_ASSIGN-STYLE[].
+*            READ TABLE GT_STYLE INTO GS_STYLE INDEX 1.
+*            IF GS_STYLE-STYLE EQ '00080000'.
+*              LV_FLUG = 'X'.
+*              PERFORM SEARCH_EN.
+*            ENDIF.
+*          ENDLOOP.
+
+PERFORM SEARCH_EN.
+
+*******************************************************
+
+WHEN '&REFRSH'.
+
+PERFORM SET_ASSIGN.
+PERFORM REFRESH_GRID_0200.
+
+WHEN OTHERS.
+ENDCASE.
+ENDCASE.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form CREATE_INSTANCE_0200
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM CREATE_INSTANCE_0200 .
+
+CREATE OBJECT GR_CON2
+EXPORTING
+CONTAINER_NAME = GV_CONTAINER2.
+
+CREATE OBJECT GR_GRID2
+EXPORTING
+I_PARENT = GR_CON2.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form APPEND_FIELDCAT_0200
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM APPEND_FIELDCAT_0200 .
+
+PERFORM GET_FIELDCATLOG_DATA_0200 .
+PERFORM MODIFY_FIELDCATLOG_DATA_0200.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form REGIST_ALV_EVENT_0200
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*&      --> GR_GRID2
+*&---------------------------------------------------------------------*
+FORM REGIST_ALV_EVENT_0200 USING PR_GRID TYPE REF TO CL_GUI_ALV_GRID.
+* REGISTER EVENT
+CALL METHOD PR_GRID->REGISTER_EDIT_EVENT
+EXPORTING
+I_EVENT_ID = CL_GUI_ALV_GRID=>MC_EVT_MODIFIED.
+
+*  CALL METHOD PR_GRID->SET_READY_FOR_INPUT
+*    EXPORTING
+*      I_READY_FOR_INPUT = 1.
+
+*-- GR_EVENT_RECEIVER
+IF GR_EVENT_RECEIVER2 IS INITIAL.
+CREATE OBJECT GR_EVENT_RECEIVER2.
+ENDIF.
+
+* Handler Event
+SET HANDLER:
+GR_EVENT_RECEIVER2->HANDLE_TOOLBAR2 FOR PR_GRID,
+*    GR_EVENT_RECEIVER2->HANDLE_DATA_CHANGED  FOR ALL INSTANCES,
+*    GR_EVENT_RECEIVER->HANDLE_DATA_CHANGED_FINISHED
+*      FOR ALL INSTANCES,
+GR_EVENT_RECEIVER2->HANDLE_USER_COMMAND2 FOR PR_GRID.
+*    GR_EVENT_RECEIVER->HANDLE_HOTSPOT_CLICK FOR ALL INSTANCES,
+*    GR_EVENT_RECEIVER->HANDLE_DOUBLE_CLICK FOR ALL INSTANCES,
+*    GR_EVENT_RECEIVER->HANDLE_ONF4          FO.
+*  GR_EVENT_RECEIVER2->HANDLE_AFTER_REFRESH FOR PR_GRID.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form DISPLAY_ALV_GRID_0200
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM DISPLAY_ALV_GRID_0200 .
+
+GS_VARIANT-REPORT = SY-REPID.
+GV_SAVE = 'A'.
+
+"*-- Build field catalog for the alv control
+CALL METHOD GR_GRID2->SET_TABLE_FOR_FIRST_DISPLAY
+EXPORTING
+I_DEFAULT = ABAP_TRUE
+IS_LAYOUT = GS_LAYOUT2
+IS_VARIANT = GS_VARIANT
+I_SAVE = GV_SAVE
+IT_TOOLBAR_EXCLUDING = GT_EXCLUDE
+CHANGING
+IT_FIELDCATALOG = GT_FIELDCAT2
+IT_SORT = GT_SORT
+IT_OUTTAB = GT_ASSIGN[]
+EXCEPTIONS
+INVALID_PARAMETER_COMBINATION = 1
+PROGRAM_ERROR = 2
+TOO_MANY_LINES = 3.
+
+IF SY-SUBRC NE 0.
+MESSAGE E000(0K) WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form REFRESH_GRID_0200
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM REFRESH_GRID_0200 .
+
+GS_STABLE-ROW = ABAP_TRUE. "Row
+GS_STABLE-COL = ABAP_TRUE. "column
+
+CALL METHOD GR_GRID2->REFRESH_TABLE_DISPLAY
+EXPORTING
+IS_STABLE = GS_STABLE
+I_SOFT_REFRESH = ABAP_TRUE.
+
+CALL METHOD CL_GUI_CFW=>FLUSH.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form GET_FIELDCATLOG_DATA_0200
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*&      --> LV_DYNNR
+*&---------------------------------------------------------------------*
+FORM GET_FIELDCATLOG_DATA_0200 .
+
+DATA: LT_FIELDCAT2 TYPE KKBLO_T_FIELDCAT.
+DATA: LV_TABNAME2 TYPE DD02L-TABNAME.
+
+LV_TABNAME2 = 'GT_ASSIGN'.
+
+CALL FUNCTION 'K_KKB_FIELDCAT_MERGE'
+EXPORTING
+I_CALLBACK_PROGRAM = SY-REPID
+I_TABNAME = LV_TABNAME2 "프로그램내 ITAB
+*     I_STRUCNAME            = 'ZEDU00_EX5ST_1'
+I_BYPASSING_BUFFER = ABAP_TRUE
+I_INCLNAME = SY-REPID
+CHANGING
+CT_FIELDCAT = LT_FIELDCAT2[]
+EXCEPTIONS
+INCONSISTENT_INTERFACE = 1
+OTHERS = 2.
+
+IF SY-SUBRC EQ 0.
+
+"-- Trasnfer LVC.
+CALL FUNCTION 'LVC_TRANSFER_FROM_KKBLO'
+EXPORTING
+IT_FIELDCAT_KKBLO = LT_FIELDCAT2[]
+IMPORTING
+ET_FIELDCAT_LVC = GT_FIELDCAT2[]
+EXCEPTIONS
+IT_DATA_MISSING = 1.
+ELSE.
+
+" Error Fieldcatalog merge!!
+MESSAGE E000 WITH 'Error Fieldcatalog merge!!'.
+ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form MODIFY_FIELDCATLOG_DATA_0200
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM MODIFY_FIELDCATLOG_DATA_0200 .
+
+DATA: LV_TEXT(50).
+
+"--- Change Fieldcat.
+LOOP AT GT_FIELDCAT2 INTO GS_FIELDCAT.
+CLEAR: LV_TEXT.
+
+"-- Change fieldcat Attribute
+CASE GS_FIELDCAT-FIELDNAME.
+WHEN 'INSNO'.
+LV_TEXT = TEXT-F12.
+WHEN 'SEQ'.
+LV_TEXT = TEXT-F14.
+WHEN 'PROCCD'.
+LV_TEXT = TEXT-F15.
+*        GS_FIELDCAT-EDIT = 'X'.
+WHEN 'PRCNA'.
+LV_TEXT = TEXT-F16.
+WHEN 'PRCOP'.
+LV_TEXT = TEXT-F17.
+WHEN 'SDATE'.
+LV_TEXT = TEXT-F18.
+*        GS_FIELDCAT-EDIT = 'X'.
+WHEN 'ESDATE'.
+LV_TEXT = TEXT-F25.
+WHEN 'SEDATE'.
+LV_TEXT = TEXT-F19.
+GS_FIELDCAT-NO_OUT = 'X'.
+*        GS_FIELDCAT-EDIT = 'X'.
+WHEN 'EDATE'.
+LV_TEXT = TEXT-F26.
+*         GS_FIELDCAT-EDIT = 'X'.
+WHEN 'ENUMB'.
+LV_TEXT = TEXT-F24.
+GS_FIELDCAT-EDIT = 'X'.
+*        GS_FIELDCAT-REF_FIELD = 'ENUMB'.
+*        GS_FIELDCAT-REF_TABLE = 'ZAPST0060'.
+*        GS_FIELDCAT-F4AVAILABL = 'X'.
+WHEN 'ENAME'.
+LV_TEXT = TEXT-F07.
+
+
+WHEN OTHERS.
+GS_FIELDCAT-NO_OUT = ABAP_TRUE.
+ENDCASE.
+"Column Optimizer
+GS_FIELDCAT-COL_OPT = 'X'.
+
+"-- Common attribute
+IF LV_TEXT IS NOT INITIAL.
+GS_FIELDCAT-COLTEXT = LV_TEXT.
+GS_FIELDCAT-SCRTEXT_L = LV_TEXT.
+GS_FIELDCAT-SCRTEXT_M = LV_TEXT.
+GS_FIELDCAT-SCRTEXT_S = LV_TEXT.
+ENDIF.
+
+MODIFY GT_FIELDCAT2 FROM GS_FIELDCAT.
+GS_FIELDCAT-COL_OPT = 'X'.
+ENDLOOP.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form EVENT_HOTSPOT_CLICK
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*&      --> E_ROW_ID
+*&      --> E_COLUMN_ID
+*&      --> ES_ROW_NO
+*&      --> SENDER
+*&---------------------------------------------------------------------*
+FORM EVENT_HOTSPOT_CLICK USING PS_ROW TYPE LVC_S_ROW "인덱스 번호
+PS_COLUMN TYPE LVC_S_COL " 누른 컬럼이름.
+PS_ROW_NO TYPE LVC_S_ROID "
+PR_SENDER TYPE REF TO CL_GUI_ALV_GRID. "그리드를 가져옴
+*
+** - Prefix - Form Parameter
+**   1. PT_  : Internal Table or Ranges
+**   2. PS_  : Structure
+**   3. PV_  : Variables
+**   4. PR_ : Reference Variables
+*
+DEFINE _STYLE_ENABLED.
+GS_STYLE-FIELDNAME = &1.
+GS_STYLE-STYLE = CL_GUI_ALV_GRID=>MC_STYLE_ENABLED.
+INSERT GS_STYLE INTO TABLE GT_STYLE.
+END-OF-DEFINITION.
+
+DEFINE _STYLE_DISABLED.
+GS_STYLE-FIELDNAME = &1.
+GS_STYLE-STYLE = CL_GUI_ALV_GRID=>MC_STYLE_DISABLED.
+INSERT GS_STYLE INTO TABLE GT_STYLE.
+END-OF-DEFINITION.
+
+CASE PR_SENDER.
+WHEN GR_GRID1. "SENDER랑 비교한 것.
+CASE PS_COLUMN-FIELDNAME. "필드네임을 받음.
+WHEN 'INSNO'.
+CLEAR : GT_ASSIGN, GT_ASSIGN[].
+
+READ TABLE GT_DISPLAY INDEX PS_ROW_NO-ROW_ID.
+IF GT_DISPLAY-INSNO = 00000.
+CLEAR : GT_ASSIGN, GT_ASSIGN[].
+ELSE.
+*            GV_HCODE = GT_DISPLAY-HCODE.
+PERFORM SET_ASSIGN.
+*            PERFORM REFRESH_GRID_0200.
+ENDIF.
+
+*첫번째는 공정별 엔지니어 배정하고
+*두번째 부터는 공정 작업완료일자가 들어가야지 사원 배정할수있도록(ENABLED) 해주는 구문!
+DATA : LV_CHECK, LV_ENABLE.
+
+LOOP AT GT_ASSIGN.
+CLEAR : GS_STYLE, GT_STYLE, GT_STYLE[].
+IF LV_ENABLE IS INITIAL. " EN비어있고
+IF LV_CHECK IS INITIAL. "체크 비어있고
+IF GT_ASSIGN-EDATE IS NOT INITIAL. "작업완료일자 입력되어있으면
+LV_CHECK = 'X'. "체크 O
+_STYLE_DISABLED: 'ENUMB'. "사번 수정 ㄴㄴ
+GT_ASSIGN-STYLE[] = GT_STYLE[].
+MODIFY GT_ASSIGN. "작업 완료일자 입력되어있으면 사번 수정못함!!
+ELSE. "작업완료일자 비어있으면
+_STYLE_ENABLED: 'ENUMB'. "사번 수정 가능
+GT_ASSIGN-STYLE[] = GT_STYLE[].
+MODIFY GT_ASSIGN.
+LV_CHECK = ''.
+LV_ENABLE = 'X'.
+ENDIF.
+ELSE.
+IF GT_ASSIGN-EDATE IS INITIAL.
+_STYLE_ENABLED: 'ENUMB'.
+GT_ASSIGN-STYLE[] = GT_STYLE[].
+MODIFY GT_ASSIGN.
+LV_CHECK = ''.
+LV_ENABLE = 'X'.
+ELSE.
+_STYLE_DISABLED: 'ENUMB'.
+GT_ASSIGN-STYLE[] = GT_STYLE[].
+MODIFY GT_ASSIGN.
+ENDIF.
+ENDIF.
+ELSE.
+_STYLE_DISABLED: 'ENUMB'.
+GT_ASSIGN-STYLE[] = GT_STYLE[].
+MODIFY GT_ASSIGN.
+ENDIF.
+
+ENDLOOP.
+
+PERFORM REFRESH_GRID_0200.
+ENDCASE.
+ENDCASE.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form SET_GRID_EXCLUDE_0100
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM SET_GRID_EXCLUDE_0100 .
+
+DATA: LS_EXCLUDE LIKE LINE OF GT_EXCLUDE.
+REFRESH: GT_EXCLUDE.
+
+"-- DEFINE _SET_EX
+DEFINE _SET_EX.
+CLEAR: LS_EXCLUDE.
+LS_EXCLUDE = &1.
+APPEND LS_EXCLUDE TO GT_EXCLUDE.
+END-OF-DEFINITION.
+
+_SET_EX:
+CL_GUI_ALV_GRID=>MC_FC_FIND, "안 빠지는 버튼 주석처리 한 부분이 나옴
+CL_GUI_ALV_GRID=>MC_FC_SORT_ASC, "빠지는 버튼
+CL_GUI_ALV_GRID=>MC_FC_SORT_DSC,
+CL_GUI_ALV_GRID=>MC_MB_SUBTOT,
+CL_GUI_ALV_GRID=>MC_MB_SUM,
+
+CL_GUI_ALV_GRID=>MC_FC_LOC_COPY_ROW,
+CL_GUI_ALV_GRID=>MC_FC_LOC_APPEND_ROW,
+CL_GUI_ALV_GRID=>MC_FC_LOC_INSERT_ROW,
+CL_GUI_ALV_GRID=>MC_FC_LOC_MOVE_ROW,
+CL_GUI_ALV_GRID=>MC_FC_LOC_DELETE_ROW,
+CL_GUI_ALV_GRID=>MC_FC_LOC_COPY,
+CL_GUI_ALV_GRID=>MC_FC_LOC_CUT,
+CL_GUI_ALV_GRID=>MC_FC_LOC_PASTE,
+CL_GUI_ALV_GRID=>MC_FC_LOC_PASTE_NEW_ROW,
+CL_GUI_ALV_GRID=>MC_FC_LOC_UNDO,
+CL_GUI_ALV_GRID=>MC_FC_CHECK,
+
+CL_GUI_ALV_GRID=>MC_FC_DETAIL,
+CL_GUI_ALV_GRID=>MC_FC_FILTER,
+CL_GUI_ALV_GRID=>MC_FC_GRAPH,
+CL_GUI_ALV_GRID=>MC_FC_HTML,
+CL_GUI_ALV_GRID=>MC_FC_INFO,
+CL_GUI_ALV_GRID=>MC_FC_REFRESH,
+
+CL_GUI_ALV_GRID=>MC_FC_VIEWS,
+CL_GUI_ALV_GRID=>MC_FC_LOAD_VARIANT,
+CL_GUI_ALV_GRID=>MC_FC_PRINT,
+CL_GUI_ALV_GRID=>MC_MB_VARIANT,
+CL_GUI_ALV_GRID=>MC_MB_EXPORT,
+
+CL_GUI_ALV_GRID=>MC_FC_VIEW_CRYSTAL,
+CL_GUI_ALV_GRID=>MC_FC_VIEW_EXCEL,
+CL_GUI_ALV_GRID=>MC_FC_VIEW_GRID,
+CL_GUI_ALV_GRID=>MC_FC_VIEW_LOTUS,
+CL_GUI_ALV_GRID=>MC_FC_EXPCRDATA,
+CL_GUI_ALV_GRID=>MC_FC_EXPCRDESIG,
+CL_GUI_ALV_GRID=>MC_FC_EXPCRTEMPL,
+CL_GUI_ALV_GRID=>MC_FC_CALL_ABC,
+CL_GUI_ALV_GRID=>MC_FC_CALL_CRBATCH.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form SET_GRID_EXCLUDE_0200
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM SET_GRID_EXCLUDE_0200 .
+
+DATA: LS_EXCLUDE LIKE LINE OF GT_EXCLUDE.
+REFRESH: GT_EXCLUDE.
+
+"-- DEFINE _SET_EX
+DEFINE _SET_EX.
+CLEAR: LS_EXCLUDE.
+LS_EXCLUDE = &1.
+APPEND LS_EXCLUDE TO GT_EXCLUDE.
+END-OF-DEFINITION.
+
+_SET_EX:
+CL_GUI_ALV_GRID=>MC_FC_FIND, "안 빠지는 버튼 주석처리 한 부분이 나옴
+CL_GUI_ALV_GRID=>MC_FC_SORT_ASC, "빠지는 버튼
+CL_GUI_ALV_GRID=>MC_FC_SORT_DSC,
+CL_GUI_ALV_GRID=>MC_MB_SUBTOT,
+CL_GUI_ALV_GRID=>MC_MB_SUM,
+
+CL_GUI_ALV_GRID=>MC_FC_LOC_COPY_ROW,
+CL_GUI_ALV_GRID=>MC_FC_LOC_APPEND_ROW,
+CL_GUI_ALV_GRID=>MC_FC_LOC_INSERT_ROW,
+CL_GUI_ALV_GRID=>MC_FC_LOC_MOVE_ROW,
+CL_GUI_ALV_GRID=>MC_FC_LOC_DELETE_ROW,
+CL_GUI_ALV_GRID=>MC_FC_LOC_COPY,
+CL_GUI_ALV_GRID=>MC_FC_LOC_CUT,
+CL_GUI_ALV_GRID=>MC_FC_LOC_PASTE,
+CL_GUI_ALV_GRID=>MC_FC_LOC_PASTE_NEW_ROW,
+CL_GUI_ALV_GRID=>MC_FC_LOC_UNDO,
+CL_GUI_ALV_GRID=>MC_FC_CHECK,
+
+CL_GUI_ALV_GRID=>MC_FC_DETAIL,
+CL_GUI_ALV_GRID=>MC_FC_FILTER,
+CL_GUI_ALV_GRID=>MC_FC_GRAPH,
+CL_GUI_ALV_GRID=>MC_FC_HTML,
+CL_GUI_ALV_GRID=>MC_FC_INFO,
+CL_GUI_ALV_GRID=>MC_FC_REFRESH,
+
+CL_GUI_ALV_GRID=>MC_FC_VIEWS,
+CL_GUI_ALV_GRID=>MC_FC_LOAD_VARIANT,
+CL_GUI_ALV_GRID=>MC_FC_PRINT,
+CL_GUI_ALV_GRID=>MC_MB_VARIANT,
+CL_GUI_ALV_GRID=>MC_MB_EXPORT,
+
+CL_GUI_ALV_GRID=>MC_FC_VIEW_CRYSTAL,
+CL_GUI_ALV_GRID=>MC_FC_VIEW_EXCEL,
+CL_GUI_ALV_GRID=>MC_FC_VIEW_GRID,
+CL_GUI_ALV_GRID=>MC_FC_VIEW_LOTUS,
+CL_GUI_ALV_GRID=>MC_FC_EXPCRDATA,
+CL_GUI_ALV_GRID=>MC_FC_EXPCRDESIG,
+CL_GUI_ALV_GRID=>MC_FC_EXPCRTEMPL,
+CL_GUI_ALV_GRID=>MC_FC_CALL_ABC,
+CL_GUI_ALV_GRID=>MC_FC_CALL_CRBATCH.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form EVENT_DATA_CHANGED
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*&      --> ER_DATA_CHANGED
+*&      --> E_ONF4
+*&      --> E_ONF4_BEFORE
+*&      --> E_ONF4_AFTER
+*&      --> E_UCOMM
+*&      --> SENDER
+*&---------------------------------------------------------------------*
+FORM EVENT_DATA_CHANGED USING PR_DATA_CHANGED TYPE REF TO CL_ALV_CHANGED_DATA_PROTOCOL
+PV_ONF4 TYPE CHAR01
+PV_ONF4_BEFORE TYPE CHAR01
+PV_ONF4_AFTER TYPE CHAR01
+PV_UCOMM TYPE SY-UCOMM
+PR_SENDER TYPE REF TO CL_GUI_ALV_GRID.
+
+** - PREFIX 정의 - FORM PARAMETER
+**   1. PT_  : Internal Table or Ranges
+**   2. PS_  : Structure
+**   3. PV_  : Variables
+**   4. PR_  : Reference Variables
+*
+DATA: LV_MSGID TYPE SYMSGID,
+LV_MSGTY TYPE SYMSGTY,
+LV_MSGNO TYPE SYMSGNO,
+LV_TYPE TYPE DD01V-DATATYPE.
+*
+**--- Begin or Example
+DATA: LS_MOD_CELLS TYPE LVC_S_MODI,
+LS_INS_CELLS TYPE LVC_S_MOCE,
+LS_DEL_CELLS TYPE LVC_S_MOCE.
+
+DATA: LV_TABIX TYPE SY-TABIX. "row 변경 체크
+
+DEFINE _MODIFY_CELL.
+CALL METHOD PR_DATA_CHANGED->MODIFY_CELL
+EXPORTING
+I_FIELDNAME = &1
+I_ROW_ID = &2
+I_VALUE = &3.
+
+END-OF-DEFINITION.
+
+DEFINE _GET_CELL_VALUE.
+CALL METHOD PR_DATA_CHANGED->GET_CELL_VALUE
+EXPORTING
+I_FIELDNAME = &1
+I_ROW_ID = &2
+IMPORTING
+E_VALUE = &3.
+END-OF-DEFINITION.
+*
+DEFINE _ADD_PROTOCOL.
+CALL METHOD PR_DATA_CHANGED->ADD_PROTOCOL_ENTRY
+EXPORTING
+I_FIELDNAME = &1
+I_ROW_ID = &2
+I_MSGID = 'ZMFI'
+I_MSGTY = &3
+I_MSGNO = &4
+I_MSGV1 = &5
+I_MSGV2 = &6
+I_MSGV3 = &7
+I_MSGV4 = &8.
+END-OF-DEFINITION.
+*
+DEFINE _MODIFY_STYLE.
+CALL METHOD PR_DATA_CHANGED->MODIFY_STYLE
+EXPORTING
+I_FIELDNAME = &1
+I_ROW_ID = &2
+I_STYLE = &3.
+END-OF-DEFINITION.
+**--- End of Example
+DATA: LV_PROSDAY TYPE ZAE_PRODAY.
+DATA : LV_ENAME TYPE ZAE_ENAME.
+DATA : LT_ASSIGN LIKE TABLE OF GT_ASSIGN WITH HEADER LINE.
+DATA : LT_SDT60 LIKE TABLE OF ZASDT0060 WITH HEADER LINE.
+
+CASE PR_SENDER.
+WHEN GR_GRID1.
+LOOP AT PR_DATA_CHANGED->MT_MOD_CELLS INTO LS_MOD_CELLS.
+CASE LS_MOD_CELLS-FIELDNAME.
+WHEN 'ENUMB'.
+READ TABLE GT_DISPLAY INDEX LS_MOD_CELLS-ROW_ID.
+
+IF SY-SUBRC EQ 0.
+GT_DISPLAY-ENUMB = LS_MOD_CELLS-VALUE.
+
+SELECT SINGLE ENAME
+INTO @LV_ENAME
+FROM ZAPST0020
+WHERE ENUMB EQ @GT_DISPLAY-ENUMB
+AND EXDATE EQ '00000000'.
+
+IF SY-SUBRC = 0.
+GT_DISPLAY-ENAME1 = LV_ENAME.
+MODIFY GT_DISPLAY INDEX LS_MOD_CELLS-ROW_ID.
+PERFORM SAVE_EN_TEAM USING LS_MOD_CELLS-ROW_ID.
+ELSE.
+MESSAGE I011.
+ENDIF.
+
+
+
+*_GET_CELL_VALUE
+*'OINST' LS_MOD_CELLS-ROW_ID GT_DISPLAY-OINST.
+
+*              IF LT_SDT60-OINST = 'B'.
+*                _MODIFY_CELL:
+*                 'ICON' LS_MOD_CELLS-ROW_ID ICON_LED_YELLOW.
+*                ELSEIF LT_SDT60-OINST = 'C'.
+*                _MODIFY_CELL:
+*                 'ICON' LS_MOD_CELLS-ROW_ID ICON_LED_GREEN.
+*              ELSE .
+*                _MODIFY_CELL:
+*                 'ICON' LS_MOD_CELLS-ROW_ID ICON_LED_RED.
+*              ENDIF.
+**GT_DISPLAY-OINST = LS_MOD_CELLS-VALUE.
+
+
+*              _GET_CELL_VALUE
+*               'OINST' LS_MOD_CELLS-ROW_ID GT_DISPLAY-OINST.
+
+IF GT_DISPLAY-OINST = 'B'.
+_MODIFY_CELL:
+'ICON' LS_MOD_CELLS-ROW_ID ICON_LED_YELLOW.
+ELSEIF GT_DISPLAY-OINST = 'C'.
+_MODIFY_CELL:
+'ICON' LS_MOD_CELLS-ROW_ID ICON_LED_GREEN.
+ELSE .
+_MODIFY_CELL:
+'ICON' LS_MOD_CELLS-ROW_ID ICON_LED_RED.
+ENDIF.
+
+
+*              READ TABLE GT_DISPLAY ASSIGNING FIELD-SYMBOL(<LS_DISPLAY>) INDEX LS_MOD_CELLS-ROW_ID.
+*              IF <LS_DISPLAY> IS ASSIGNED.
+*
+*                CASE <LS_DISPLAY>-OINST .
+*                  WHEN 'c'.
+*                    <LS_DISPLAY>-ICON = ICON_LED_GREEN.
+*                  WHEN  'B'.
+*                    <LS_DISPLAY>-ICON = ICON_LED_YELLOW.
+*                  WHEN 'A'.
+*                    <LS_DISPLAY>-ICON = ICON_LED_RED.
+*                ENDCASE.
+*              ENDIF.
+*              LOOP AT GT_DISPLAY .
+*
+*
+*                CASE GT_DISPLAY-OINST .
+*                  WHEN 'c'.
+*                    GT_DISPLAY-ICON = ICON_LED_GREEN.
+*                  WHEN  'B'.
+*                    GT_DISPLAY-ICON = ICON_LED_YELLOW.
+*                  WHEN 'A'.
+*                    GT_DISPLAY-ICON = ICON_LED_RED.
+*                ENDCASE.
+*
+*                MODIFY GT_DISPLAY.
+*              ENDIF.
+*
+*              ENDLOOP.
+
+ENDIF.
+
+PERFORM REFRESH_GRID_0100.
+ENDCASE.
+ENDLOOP.
+
+CLEAR : LV_ENAME.
+
+WHEN OTHERS.
+ENDCASE.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form INIT_LAYOUT_0100
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM INIT_LAYOUT_0100 .
+
+*  GS_LAYOUT-EDIT_MODE  = ABAP_TRUE.
+*  GS_LAYOUT-ZEBRA      = ABAP_TRUE.
+GS_LAYOUT-CWIDTH_OPT = ABAP_TRUE.
+GS_LAYOUT-SEL_MODE = 'C'. "B:단일,C:복수,D:셀,A:행/열
+*  GS_LAYOUT-BOX_FNAME  = SPACE.
+GS_LAYOUT-NO_ROWMARK = SPACE.
+
+GS_LAYOUT-STYLEFNAME = 'STYLE'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form CREATE_INSTANCE_0210
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM CREATE_INSTANCE_0210 .
+
+CREATE OBJECT GR_CON3
+EXPORTING
+CONTAINER_NAME = GV_CONTAINER3.
+
+CREATE OBJECT GR_GRID3
+EXPORTING
+I_PARENT = GR_CON3.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form APPEND_FIELDCAT_0210
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM APPEND_FIELDCAT_0210 .
+
+PERFORM GET_FIELDCATLOG_DATA_0210 .
+PERFORM MODIFY_FIELDCATLOG_DATA_0210.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form REGIST_ALV_EVENT_0210
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*&      --> GR_GRID3
+*&---------------------------------------------------------------------*
+FORM REGIST_ALV_EVENT_0210 USING PR_GRID TYPE REF TO CL_GUI_ALV_GRID.
+* REGISTER EVENT
+CALL METHOD PR_GRID->REGISTER_EDIT_EVENT
+EXPORTING
+I_EVENT_ID = CL_GUI_ALV_GRID=>MC_EVT_MODIFIED.
+
+*  CALL METHOD PR_GRID->SET_READY_FOR_INPUT
+*    EXPORTING
+*      I_READY_FOR_INPUT = 1.
+
+*-- GR_EVENT_RECEIVER
+IF GR_EVENT_RECEIVER3 IS INITIAL.
+CREATE OBJECT GR_EVENT_RECEIVER3.
+ENDIF.
+
+* Handler Event
+SET HANDLER:
+*    GR_EVENT_RECEIVER->HANDLE_TOOLBAR       FOR ALL INSTANCES,
+GR_EVENT_RECEIVER3->HANDLE_DATA_CHANGED FOR PR_GRID,
+*    GR_EVENT_RECEIVER->HANDLE_DATA_CHANGED_FINISHED
+*      FOR ALL INSTANCES,
+*    GR_EVENT_RECEIVER->HANDLE_USER_COMMAND  FOR ALL INSTANCES.
+*    GR_EVENT_RECEIVER->HANDLE_HOTSPOT_CLICK FOR ALL INSTANCES,
+GR_EVENT_RECEIVER3->HANDLE_DOUBLE_CLICK FOR PR_GRID.
+*    GR_EVENT_RECEIVER->HANDLE_ONF4          FO.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form DISPLAY_ALV_GRID_0210
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM DISPLAY_ALV_GRID_0210 .
+
+GS_VARIANT-REPORT = SY-REPID.
+GV_SAVE = 'A'.
+
+"*-- Build field catalog for the alv control
+CALL METHOD GR_GRID3->SET_TABLE_FOR_FIRST_DISPLAY
+EXPORTING
+I_DEFAULT = ABAP_TRUE
+IS_LAYOUT = GS_LAYOUT
+IS_VARIANT = GS_VARIANT
+I_SAVE = GV_SAVE
+IT_TOOLBAR_EXCLUDING = GT_EXCLUDE
+CHANGING
+IT_FIELDCATALOG = GT_FIELDCAT3
+IT_SORT = GT_SORT
+IT_OUTTAB = GT_ENUMB[]
+EXCEPTIONS
+INVALID_PARAMETER_COMBINATION = 1
+PROGRAM_ERROR = 2
+TOO_MANY_LINES = 3.
+
+IF SY-SUBRC NE 0.
+MESSAGE E000(0K) WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form REFRESH_GRID_0210
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM REFRESH_GRID_0210 .
+
+GS_STABLE-ROW = ABAP_TRUE. "Row
+GS_STABLE-COL = ABAP_TRUE. "column
+
+CALL METHOD GR_GRID3->REFRESH_TABLE_DISPLAY
+EXPORTING
+IS_STABLE = GS_STABLE
+I_SOFT_REFRESH = SPACE.
+
+CALL METHOD CL_GUI_CFW=>FLUSH.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form GET_FIELDCATLOG_DATA_0210
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM GET_FIELDCATLOG_DATA_0210 .
+
+DATA: LT_FIELDCAT3 TYPE KKBLO_T_FIELDCAT.
+DATA: LV_TABNAME3 TYPE DD02L-TABNAME.
+
+LV_TABNAME3 = 'GT_ENUMB'.
+
+CALL FUNCTION 'K_KKB_FIELDCAT_MERGE'
+EXPORTING
+I_CALLBACK_PROGRAM = SY-REPID
+I_TABNAME = LV_TABNAME3 "프로그램내 ITAB
+*     I_STRUCNAME            = 'ZEDU00_EX5ST_1'
+I_BYPASSING_BUFFER = ABAP_TRUE
+I_INCLNAME = SY-REPID
+CHANGING
+CT_FIELDCAT = LT_FIELDCAT3[]
+EXCEPTIONS
+INCONSISTENT_INTERFACE = 1
+OTHERS = 2.
+
+IF SY-SUBRC EQ 0.
+
+"-- Trasnfer LVC.
+CALL FUNCTION 'LVC_TRANSFER_FROM_KKBLO'
+EXPORTING
+IT_FIELDCAT_KKBLO = LT_FIELDCAT3[]
+IMPORTING
+ET_FIELDCAT_LVC = GT_FIELDCAT3[]
+EXCEPTIONS
+IT_DATA_MISSING = 1.
+ELSE.
+
+" Error Fieldcatalog merge!!
+MESSAGE E000 WITH 'Error Fieldcatalog merge!!'.
+ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form MODIFY_FIELDCATLOG_DATA_0210
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM MODIFY_FIELDCATLOG_DATA_0210 .
+
+DATA: LV_TEXT(50).
+
+"--- Change Fieldcat.
+LOOP AT GT_FIELDCAT3 INTO GS_FIELDCAT.
+CLEAR: LV_TEXT.
+
+"-- Change fieldcat Attribute
+CASE GS_FIELDCAT-FIELDNAME.
+WHEN 'ENUMB'.
+LV_TEXT = TEXT-F27.
+GS_FIELDCAT-KEY = 'X'.
+WHEN 'ENAME'.
+LV_TEXT = TEXT-F28.
+*        GS_FIELDCAT-KEY = 'X'.
+WHEN 'PROCCD'.
+LV_TEXT = TEXT-F31.
+*        GS_FIELDCAT-KEY = 'X'.
+WHEN 'EXLEV'.
+LV_TEXT = TEXT-F29.
+*        GS_FIELDCAT-KEY = 'X'.
+
+WHEN OTHERS.
+ENDCASE.
+"Column Optimizer
+GS_FIELDCAT-COL_OPT = ABAP_TRUE.
+
+"-- Common attribute
+IF LV_TEXT IS NOT INITIAL.
+GS_FIELDCAT-COLTEXT = LV_TEXT.
+GS_FIELDCAT-SCRTEXT_L = LV_TEXT.
+GS_FIELDCAT-SCRTEXT_M = LV_TEXT.
+GS_FIELDCAT-SCRTEXT_S = LV_TEXT.
+ENDIF.
+
+MODIFY GT_FIELDCAT3 FROM GS_FIELDCAT.
+GS_FIELDCAT-COL_OPT = ABAP_TRUE.
+ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0200  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE USER_COMMAND_0200 INPUT.
+
+CLEAR : SAVE_OK.
+
+SAVE_OK = OK_CODE.
+CLEAR : OK_CODE.
+
+CASE SAVE_OK.
+WHEN 'OK'.
+
+WHEN OTHERS.
+ENDCASE.
+
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Form SAVE_EN_TEAM
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM SAVE_EN_TEAM USING P_TABIX TYPE SY-TABIX.
+
+DATA : LS_ZAPST0050 TYPE ZAPST0050. "설치헤더
+DATA : LT_ZAPST0050 LIKE TABLE OF LS_ZAPST0050.
+
+DATA : LS_ZAPST0060 TYPE ZAPST0060. "설치아이템
+DATA : LT_ZAPST0060 TYPE TABLE OF ZAPST0060.
+
+DATA : LS_ZAPST0040 TYPE ZAPST0040. "하우스정보
+DATA : LT_ZAPST0040 LIKE TABLE OF LS_ZAPST0040.
+
+DATA : LS_ZASDT0060 TYPE ZASDT0060. "주문아이템
+DATA : LT_ZASDT0060 LIKE TABLE OF LS_ZASDT0060.
+
+DATA : LT_DISPLAY LIKE TABLE OF GT_DISPLAY.
+DATA : LT_ASSIGN LIKE TABLE OF GT_ASSIGN.
+
+DATA: LV_ID TYPE NUMC5. "설치번호 채번
+DATA: LV_HNUMB TYPE NUMC5. "하우스번호 채번
+
+DATA : LV_SEN1 TYPE NUMC3. "A1센서 ID채번
+DATA : LV_SEN2 TYPE NUMC3. "B1센서 ID채번
+
+DATA : LV_TMSID TYPE ZE_SCODE.
+DATA : LV_HMSID TYPE ZE_SCODE.
+
+DATA : LV_MSG TYPE CHAR50.
+
+DATA : LV_SUM_PROSDAY TYPE NUMC3.
+LV_SUM_PROSDAY = 0.
+
+DATA: BEGIN OF LT_SUM OCCURS 0,
+PROSDAY TYPE ZAPST0010-PROSDAY,
+END OF LT_SUM.
+
+READ TABLE GT_DISPLAY INDEX P_TABIX.
+
+
+IF GT_DISPLAY-ENUMB IS NOT INITIAL AND GT_DISPLAY-INSNO IS INITIAL.
+
+
+SELECT PROSDAY
+INTO CORRESPONDING FIELDS OF TABLE LT_SUM
+FROM ZAPST0010
+WHERE HCODE EQ GT_DISPLAY-HCODE.
+
+LOOP AT LT_SUM.
+LV_SUM_PROSDAY = LV_SUM_PROSDAY + LT_SUM-PROSDAY .
+ENDLOOP.
+
+IF SY-SUBRC = 0.
+GT_DISPLAY-SEDATE = SY-DATUM + LV_SUM_PROSDAY + 4.
+*            MODIFY GT_DISPLAY INDEX P_TABIX.
+*      APPEND LS_ZAPST0050 TO LT_ZAPST0050.
+ENDIF.
+
+CALL FUNCTION 'NUMBER_GET_NEXT' "설치번호 채번
+EXPORTING
+NR_RANGE_NR = '1' "<=== 이건 NO에 넣은값 "00"
+OBJECT = 'ZA_INSNO' "<=== 이건 오프젝트
+QUANTITY = '1'
+IMPORTING
+NUMBER = LV_ID "<== 가져온값.
+EXCEPTIONS
+INTERVAL_NOT_FOUND = 1
+NUMBER_RANGE_NOT_INTERN = 2
+OBJECT_NOT_FOUND = 3
+QUANTITY_IS_0 = 4
+QUANTITY_IS_NOT_1 = 5
+INTERVAL_OVERFLOW = 6
+BUFFER_OVERFLOW = 7.
+
+
+IF SY-SUBRC = 0 .
+GT_DISPLAY-INSNO = LV_ID .
+MODIFY GT_DISPLAY INDEX P_TABIX.
+*      MESSAGE I003 WITH LV_ID .
+ENDIF.
+
+CALL FUNCTION 'NUMBER_GET_NEXT' "하우스번호 채번
+EXPORTING
+NR_RANGE_NR = '1' "<=== 이건 NO에 넣은값 "00"
+OBJECT = 'ZA_HNUMB' "<=== 이건 오프젝트
+QUANTITY = '1'
+IMPORTING
+NUMBER = LV_HNUMB "<== 가져온값.
+EXCEPTIONS
+INTERVAL_NOT_FOUND = 1
+NUMBER_RANGE_NOT_INTERN = 2
+OBJECT_NOT_FOUND = 3
+QUANTITY_IS_0 = 4
+QUANTITY_IS_NOT_1 = 5
+INTERVAL_OVERFLOW = 6
+BUFFER_OVERFLOW = 7.
+
+DATA : LV_CNUMB LIKE ZASDT0050-CNUMB.
+
+IF SY-SUBRC = 0 .
+SELECT SINGLE CNUMB
+INTO @LV_CNUMB
+FROM ZASDT0050
+WHERE ONUMB EQ @GT_DISPLAY-ONUMB.
+
+LS_ZAPST0040-INSNO = LV_ID . "설치번호
+LS_ZAPST0040-HNUMB = LV_HNUMB. "하우스번호
+LS_ZAPST0040-CNUMB = LV_CNUMB. "고객번호
+APPEND LS_ZAPST0040 TO LT_ZAPST0040. "LS를 받아서 LT를 새로 만드는거라서 APPEND
+ENDIF.
+
+CALL FUNCTION 'NUMBER_GET_NEXT' "A1센서번호 채번
+EXPORTING
+NR_RANGE_NR = '01' "<=== 이건 NO에 넣은값 "00"
+OBJECT = 'ZA_TMSID' "<=== 이건 오프젝트
+QUANTITY = '1'
+IMPORTING
+NUMBER = LV_SEN1 "<== 가져온값.
+EXCEPTIONS
+INTERVAL_NOT_FOUND = 1
+NUMBER_RANGE_NOT_INTERN = 2
+OBJECT_NOT_FOUND = 3
+QUANTITY_IS_0 = 4
+QUANTITY_IS_NOT_1 = 5
+INTERVAL_OVERFLOW = 6
+BUFFER_OVERFLOW = 7.
+
+CALL FUNCTION 'NUMBER_GET_NEXT' "A1센서번호 채번
+EXPORTING
+NR_RANGE_NR = '01' "<=== 이건 NO에 넣은값 "00"
+OBJECT = 'ZA_HMSID' "<=== 이건 오프젝트
+QUANTITY = '1'
+IMPORTING
+NUMBER = LV_SEN2 "<== 가져온값.
+EXCEPTIONS
+INTERVAL_NOT_FOUND = 1
+NUMBER_RANGE_NOT_INTERN = 2
+OBJECT_NOT_FOUND = 3
+QUANTITY_IS_0 = 4
+QUANTITY_IS_NOT_1 = 5
+INTERVAL_OVERFLOW = 6
+BUFFER_OVERFLOW = 7.
+
+CONCATENATE 'A1' LV_SEN1 INTO LV_TMSID.
+CONCATENATE 'B1' LV_SEN2 INTO LV_HMSID.
+
+DATA : LS_ZEDUT001 TYPE ZEDUT001.
+DATA : LT_ZEDUT001 LIKE TABLE OF LS_ZEDUT001.
+
+IF SY-SUBRC = 0 .
+LS_ZEDUT001-SCODE = LV_TMSID.
+LS_ZEDUT001-STYPE = 'A1'.
+*      LS_ZEDUT001-USEYN = 'X'.
+LS_ZEDUT001-BDATE = SY-DATUM.
+APPEND LS_ZEDUT001 TO LT_ZEDUT001.
+ENDIF.
+
+IF SY-SUBRC = 0 .
+LS_ZEDUT001-SCODE = LV_HMSID .
+LS_ZEDUT001-STYPE = 'B1'.
+*      LS_ZEDUT001-USEYN = 'X'.
+APPEND LS_ZEDUT001 TO LT_ZEDUT001.
+LS_ZAPST0040-TMSID = LV_TMSID. "온도센서
+LS_ZAPST0040-HMSID = LV_HMSID. "습도센서
+APPEND LS_ZAPST0040 TO LT_ZAPST0040.
+ENDIF.
+
+SELECT A~SEQ, A~PROCCD, B~WORK01, B~WORK02, B~WORK03
+INTO CORRESPONDING FIELDS OF TABLE @LT_ZAPST0060
+FROM ZAPST0010 AS A INNER JOIN ZAPST0070 AS B
+ON A~PROCCD EQ B~PROCCD
+WHERE A~HCODE EQ @GT_DISPLAY-HCODE.
+
+LOOP AT LT_ZAPST0060 INTO LS_ZAPST0060.
+LS_ZAPST0060-INSNO = GT_DISPLAY-INSNO.
+MODIFY LT_ZAPST0060 FROM LS_ZAPST0060.
+ENDLOOP.
+
+UPDATE ZASDT0060 SET INSNO = GT_DISPLAY-INSNO OINST = 'B'
+WHERE ONUMB = GT_DISPLAY-ONUMB AND OTURN = GT_DISPLAY-OTURN. "주문아이템
+*
+GT_DISPLAY-OINST = 'B'.
+*    GT_DISPLAY-ICON = ICON_LED_YELLOW.
+MODIFY GT_DISPLAY INDEX P_TABIX TRANSPORTING OINST. "transporting은 oinst만 modify해주겟다는 것,,
+*  ELSE.
+ENDIF.
+
+MOVE-CORRESPONDING GT_DISPLAY TO LS_ZAPST0050.
+APPEND LS_ZAPST0050 TO LT_ZAPST0050.
+
+MODIFY ZAPST0040 FROM TABLE LT_ZAPST0040. "하우스정보
+MODIFY ZAPST0050 FROM TABLE LT_ZAPST0050. "설치헤더
+MODIFY ZAPST0060 FROM TABLE LT_ZAPST0060. "설치아이템
+MODIFY ZEDUT001 FROM TABLE LT_ZEDUT001.
+
+
+CONCATENATE '설치번호'LV_ID ', 하우스번호'LV_HNUMB ', 온도센서'LV_TMSID ', 습도센서'LV_HMSID INTO LV_MSG.
+MESSAGE I009 WITH LV_MSG.
+
+*  PERFORM REFRESH_GRID_0100.
+
+CLEAR : LT_DISPLAY[], LT_DISPLAY, LV_CNT, LT_ZAPST0060.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form INIT_LAYOUT_0200
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM INIT_LAYOUT_0200 .
+
+*  GS_LAYOUT-EDIT_MODE  = ABAP_TRUE.
+*  GS_LAYOUT-ZEBRA      = ABAP_TRUE.
+*  GS_LAYOUT-CWIDTH_OPT = ABAP_TRUE.
+*  GS_LAYOUT-SEL_MODE   = SPACE.     "B:단일,C:복수,D:셀,A:행/열
+*  GS_LAYOUT-BOX_FNAME  = SPACE.
+*  GS_LAYOUT-NO_ROWMARK = SPACE.
+
+GS_LAYOUT2-STYLEFNAME = 'STYLE'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form SEARCH_EN
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM SEARCH_EN .
+
+DATA : LS_ZAPST0060 TYPE ZAPST0060. "설치아이템
+DATA : LT_ZAPST0060 TYPE TABLE OF ZAPST0060.
+
+DATA : LT_ENUMB LIKE TABLE OF GT_ENUMB WITH HEADER LINE.
+
+CLEAR : GT_ENUMB, LT_ZAPST0060, LS_ZAPST0060.
+
+DATA: LV_PROCCD TYPE CHAR10.
+DATA : LV_CNT TYPE N LENGTH 2,
+LV_POPUP TYPE C.
+
+DATA:
+LT_ROWS TYPE LVC_T_ROW,
+LS_ROWS TYPE LVC_S_ROW.
+
+CALL METHOD GR_GRID2->GET_SELECTED_ROWS
+IMPORTING
+ET_INDEX_ROWS = LT_ROWS.
+
+*  IF LT_ROWS IS INITIAL.
+*    MESSAGE I006. "설치번호를 클릭해주세요
+*    ENDIF.
+
+*  LOOP AT LT_ROWS INTO LS_ROWS.
+
+LOOP AT GT_ASSIGN INTO DATA(LS_ASSIGN) .
+DATA(LT_STYLE) = LS_ASSIGN-STYLE[].
+IF LINE_EXISTS( LT_STYLE[ STYLE = '00080000' ] ).
+LV_POPUP = ABAP_TRUE.
+
+EXIT.
+ENDIF.
+ENDLOOP.
+
+*  READ TABLE GT_ASSIGN INTO DATA(LS_ASSIGN) INDEX LS_ROWS-INDEX.
+
+
+*  ENDLOOP.
+
+CHECK LV_POPUP IS NOT INITIAL.
+
+
+
+
+*  IF GT_ASSIGN[] IS NOT INITIAL.
+
+LOOP AT GT_ASSIGN.
+GT_STYLE[] = GT_ASSIGN-STYLE[].
+READ TABLE GT_STYLE INTO GS_STYLE INDEX 1.
+IF GS_STYLE-STYLE EQ '00080000'. "enable에 해당(80000)하는 proccd를 lv_proccd에 넣어줌
+LV_PROCCD = GT_ASSIGN-PROCCD.
+ENDIF.
+CLEAR : GT_STYLE[].
+ENDLOOP.
+
+SELECT DISTINCT * "LT_ENUMB에 공정코드 같은거 셀렉
+*    A~ENUMB, B~ENAME, B~EXLEV
+INTO CORRESPONDING FIELDS OF TABLE @LT_ENUMB
+FROM ZAPST0030 AS A INNER JOIN ZAPST0020 AS B
+ON A~ENUMB EQ B~ENUMB
+*                        INNER  JOIN ZAPST0030 AS C
+*                                ON C~PROCCD EQ A~PROCCD
+WHERE A~PROCCD EQ @LV_PROCCD.
+*        AND C~EDATE NE '00000000'
+*        AND ( C~SDATE > SY-DATUM
+*            OR C~EDATE < SY-DATUM ).
+
+*      AND ( C~SDATE IS NOT NULL AND C~EDATE IS NOT NULL )
+*     OR ( C~SDATE IS NULL AND C~EDATE IS NULL ).
+
+SELECT * "LT_ZAPST0060에 진행중인거 셀렉
+*    A~ENUMB, B~ENAME, B~EXLEV
+INTO CORRESPONDING FIELDS OF TABLE @LT_ZAPST0060
+FROM ZAPST0060
+WHERE PROCCD EQ @LV_PROCCD
+AND ( SDATE NE '00000000' AND EDATE EQ '00000000' ). "시작일이 들어있고, 완료일이 비어있는거 = 진행중
+
+LOOP AT LT_ZAPST0060 INTO LS_ZAPST0060.
+DELETE LT_ENUMB WHERE ENUMB EQ LS_ZAPST0060-ENUMB.
+ENDLOOP.
+
+LOOP AT LT_ENUMB.
+MOVE-CORRESPONDING LT_ENUMB TO GT_ENUMB.
+APPEND GT_ENUMB .
+
+CLEAR : LT_ZAPST0060[].
+ENDLOOP.
+
+
+DESCRIBE TABLE GT_ENUMB LINES LV_CNT.
+IF LV_CNT NE 0.
+CALL SCREEN '0210' STARTING AT 5 5.
+
+ELSEIF LV_CNT EQ 0.
+MESSAGE I010.
+ENDIF.
+
+CLEAR : LT_ENUMB, LT_ENUMB[].
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form CHECK_SEL
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM CHECK_SEL .
+
+CALL METHOD GR_GRID3->GET_SELECTED_ROWS
+IMPORTING
+ET_INDEX_ROWS = GT_ROWS.
+
+DESCRIBE TABLE GT_ROWS LINES SY-TFILL.
+
+IF SY-TFILL NE 1.
+GV_EXIT = 'X'.
+MESSAGE S007 DISPLAY LIKE 'E' .
+ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form SET_ENGDATA
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM SET_ENGDATA .
+
+DATA: LV_PROSDAY TYPE ZAE_PRODAY.
+DATA : LT_ASSIGN LIKE TABLE OF GT_ASSIGN WITH HEADER LINE.
+DATA : LV_SUM_PROSDAY TYPE NUMC3.
+LV_SUM_PROSDAY = 0.
+
+DATA: BEGIN OF LT_SUM OCCURS 0,
+PROSDAY TYPE ZAPST0010-PROSDAY,
+END OF LT_SUM.
+
+LOOP AT GT_ASSIGN.
+MOVE-CORRESPONDING GT_ASSIGN TO LT_ASSIGN.
+APPEND LT_ASSIGN.
+ENDLOOP.
+
+DATA : LV_INDEX TYPE I.
+LV_INDEX = 0.
+
+LOOP AT GT_ASSIGN.
+LV_INDEX = LV_INDEX + 1.
+GT_STYLE[] = GT_ASSIGN-STYLE[].
+READ TABLE GT_STYLE INTO GS_STYLE INDEX 1.
+IF GS_STYLE-STYLE EQ '00080000'. "enable에 해당(80000)하는 proccd를 lv_proccd에 넣어.
+READ TABLE GT_ASSIGN INDEX LV_INDEX. "GT_ASSIGN은 몇번째 줄인지 읽어라
+EXIT.
+ENDIF.
+ENDLOOP.
+
+
+SELECT PROSDAY
+INTO CORRESPONDING FIELDS OF TABLE LT_SUM
+FROM ZAPST0010
+WHERE HCODE EQ GT_DISPLAY-HCODE.
+
+LOOP AT LT_SUM.
+LV_SUM_PROSDAY = LV_SUM_PROSDAY + LT_SUM-PROSDAY.
+ENDLOOP.
+
+
+LOOP AT GT_ROWS INTO GS_ROWS.
+
+READ TABLE GT_ENUMB INDEX GS_ROWS-INDEX.
+
+SELECT SINGLE PROSDAY
+INTO LV_PROSDAY
+FROM ZAPST0010
+WHERE HCODE EQ GT_DISPLAY-HCODE
+AND SEQ EQ GT_ASSIGN-SEQ.
+
+
+READ TABLE LT_ASSIGN INDEX LV_INDEX - 1. "LT_ASSIGN은 이전 줄을 읽어라
+
+
+
+IF LV_INDEX = 1. "첫번째 줄일 경우
+*       GT_ASSIGN-SDATE IS INITIAL
+GT_ASSIGN-SDATE = GT_DISPLAY-SEDATE - LV_SUM_PROSDAY - 5. "작시 = 설치예정일 - 공수합 -5
+GT_ASSIGN-ESDATE = GT_ASSIGN-SDATE + LV_PROSDAY. "작완예정일 = 작시 + 공수
+*      MODIFY GT_ASSIGN INDEX LV_INDEX.
+
+
+ELSE. "첫번째줄 외에,,
+GT_ASSIGN-SDATE = LT_ASSIGN-EDATE + 1. "이전줄의 완료일에 +1
+GT_ASSIGN-ESDATE = GT_ASSIGN-SDATE + LV_PROSDAY.
+*      MODIFY GT_ASSIGN INDEX LV_INDEX.
+
+ENDIF.
+
+
+GT_ASSIGN-ENUMB = GT_ENUMB-ENUMB.
+GT_ASSIGN-ENAME = GT_ENUMB-ENAME.
+GV_FLUG = 'X'.
+MODIFY GT_ASSIGN INDEX LV_INDEX. "인덱스에 해당하는거 수정해라
+ENDLOOP.
+
+PERFORM REFRESH_GRID_0200.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form CHECK_SEL2
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM CHECK_SEL2 .
+CALL METHOD GR_GRID2->GET_SELECTED_ROWS
+IMPORTING
+ET_INDEX_ROWS = GT_ROWS.
+
+DESCRIBE TABLE GT_ROWS LINES SY-TFILL.
+
+IF SY-TFILL NE 1.
+GV_EXIT = 'X'.
+MESSAGE S007 DISPLAY LIKE 'E' .
+ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form INIT
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM INIT .
+
+S_ODAYA-HIGH = SY-DATUM.
+S_ODAYA-LOW = SY-DATUM - 15.
+APPEND S_ODAYA.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form SET_ASSIGN
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM SET_ASSIGN .
+
+SELECT C~INSNO,C~SEQ,C~PROCCD,D~PRCNA,D~PRCOP,C~SDATE,C~ESDATE,C~EDATE, C~ENUMB, C~WORK01, C~WORK02, C~WORK03, C~WSTATE1, C~WSTATE2, C~WSTATE3, C~WSTATE_R, E~ENAME
+INTO CORRESPONDING FIELDS OF TABLE @GT_ASSIGN
+FROM ZAPST0050 AS A LEFT OUTER JOIN ZAPST0010 AS B
+ON B~HCODE EQ A~HCODE
+INNER JOIN ZAPST0060 AS C
+ON C~INSNO EQ A~INSNO
+AND C~SEQ EQ B~SEQ
+LEFT OUTER JOIN ZAPST0070 AS D
+ON D~PROCCD EQ C~PROCCD
+LEFT OUTER JOIN ZAPST0020 AS E
+ON E~ENUMB EQ C~ENUMB
+WHERE A~INSNO EQ @GT_DISPLAY-INSNO
+ORDER BY C~SEQ ASCENDING.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form SET_GRID_EXCLUDE_0210
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM SET_GRID_EXCLUDE_0210 .
+
+DATA: LS_EXCLUDE LIKE LINE OF GT_EXCLUDE.
+REFRESH: GT_EXCLUDE.
+
+"-- DEFINE _SET_EX
+DEFINE _SET_EX.
+CLEAR: LS_EXCLUDE.
+LS_EXCLUDE = &1.
+APPEND LS_EXCLUDE TO GT_EXCLUDE.
+END-OF-DEFINITION.
+
+_SET_EX:
+CL_GUI_ALV_GRID=>MC_FC_FIND, "안 빠지는 버튼 주석처리 한 부분이 나옴
+CL_GUI_ALV_GRID=>MC_FC_SORT_ASC, "빠지는 버튼
+CL_GUI_ALV_GRID=>MC_FC_SORT_DSC,
+CL_GUI_ALV_GRID=>MC_MB_SUBTOT,
+CL_GUI_ALV_GRID=>MC_MB_SUM,
+
+CL_GUI_ALV_GRID=>MC_FC_LOC_COPY_ROW,
+CL_GUI_ALV_GRID=>MC_FC_LOC_APPEND_ROW,
+CL_GUI_ALV_GRID=>MC_FC_LOC_INSERT_ROW,
+CL_GUI_ALV_GRID=>MC_FC_LOC_MOVE_ROW,
+CL_GUI_ALV_GRID=>MC_FC_LOC_DELETE_ROW,
+CL_GUI_ALV_GRID=>MC_FC_LOC_COPY,
+CL_GUI_ALV_GRID=>MC_FC_LOC_CUT,
+CL_GUI_ALV_GRID=>MC_FC_LOC_PASTE,
+CL_GUI_ALV_GRID=>MC_FC_LOC_PASTE_NEW_ROW,
+CL_GUI_ALV_GRID=>MC_FC_LOC_UNDO,
+CL_GUI_ALV_GRID=>MC_FC_CHECK,
+
+CL_GUI_ALV_GRID=>MC_FC_DETAIL,
+CL_GUI_ALV_GRID=>MC_FC_FILTER,
+CL_GUI_ALV_GRID=>MC_FC_GRAPH,
+CL_GUI_ALV_GRID=>MC_FC_HTML,
+CL_GUI_ALV_GRID=>MC_FC_INFO,
+CL_GUI_ALV_GRID=>MC_FC_REFRESH,
+
+CL_GUI_ALV_GRID=>MC_FC_VIEWS,
+CL_GUI_ALV_GRID=>MC_FC_LOAD_VARIANT,
+CL_GUI_ALV_GRID=>MC_FC_PRINT,
+CL_GUI_ALV_GRID=>MC_MB_VARIANT,
+CL_GUI_ALV_GRID=>MC_MB_EXPORT,
+
+CL_GUI_ALV_GRID=>MC_FC_VIEW_CRYSTAL,
+CL_GUI_ALV_GRID=>MC_FC_VIEW_EXCEL,
+CL_GUI_ALV_GRID=>MC_FC_VIEW_GRID,
+CL_GUI_ALV_GRID=>MC_FC_VIEW_LOTUS,
+CL_GUI_ALV_GRID=>MC_FC_EXPCRDATA,
+CL_GUI_ALV_GRID=>MC_FC_EXPCRDESIG,
+CL_GUI_ALV_GRID=>MC_FC_EXPCRTEMPL,
+CL_GUI_ALV_GRID=>MC_FC_CALL_ABC,
+CL_GUI_ALV_GRID=>MC_FC_CALL_CRBATCH.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form HANDLE_AFTER_REFRESH
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM HANDLE_AFTER_REFRESH .
+
+* SELECT C~INSNO,C~SEQ,C~PROCCD,D~PRCNA,D~PRCOP,C~SDATE,C~ESDATE,C~EDATE, C~ENUMB, C~WORK01, C~WORK02, C~WORK03, E~ENAME
+*             INTO CORRESPONDING FIELDS OF TABLE @GT_ASSIGN
+*             FROM ZAPST0050 AS A LEFT OUTER JOIN ZAPST0010 AS B
+*                                         ON B~HCODE EQ A~HCODE
+*                                 INNER JOIN ZAPST0060 AS C
+*                                         ON C~INSNO EQ A~INSNO
+*                                        AND C~SEQ EQ B~SEQ
+*                                 LEFT OUTER JOIN ZAPST0070 AS D
+*                                         ON D~PROCCD EQ C~PROCCD
+*                                 LEFT OUTER JOIN ZAPST0020 AS E
+*                                         ON E~ENUMB EQ C~ENUMB
+*            WHERE A~INSNO EQ @GT_DISPLAY-INSNO
+*             ORDER BY C~SEQ ASCENDING.
+*
+* PERFORM REFRESH_GRID_0200.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form SELECT_DATA2
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM SELECT_DATA2 .
+
+DEFINE _STYLE_ENABLED.
+GS_STYLE-FIELDNAME = &1.
+GS_STYLE-STYLE = CL_GUI_ALV_GRID=>MC_STYLE_ENABLED.
+INSERT GS_STYLE INTO TABLE GT_STYLE.
+END-OF-DEFINITION.
+
+DEFINE _STYLE_DISABLED.
+GS_STYLE-FIELDNAME = &1.
+GS_STYLE-STYLE = CL_GUI_ALV_GRID=>MC_STYLE_DISABLED.
+INSERT GS_STYLE INTO TABLE GT_STYLE.
+END-OF-DEFINITION.
+
+SELECT C~ENAME, A~ODATS, A~HCODE, D~INSNO, D~SEDATE, A~ONUMB, A~OTURN, D~ENUMB, E~ENAME AS ENAME1, G~CNAME
+INTO CORRESPONDING FIELDS OF TABLE @GT_DISPLAY
+
+FROM ZASDT0060 AS A LEFT OUTER JOIN ZASDT0050 AS B
+ON B~ONUMB EQ A~ONUMB
+LEFT OUTER JOIN ZAPST0020 AS C
+ON C~ENUMB EQ B~ENUMB
+LEFT OUTER JOIN ZAPST0050 AS D
+ON D~INSNO EQ A~INSNO
+LEFT OUTER JOIN ZAPST0020 AS E
+ON E~ENUMB EQ D~ENUMB
+LEFT OUTER JOIN ZASDT0010 AS G
+ON G~CNUMB EQ B~CNUMB
+WHERE B~ODAYA IN @S_ODAYA
+AND A~ONUMB IN @S_ONUMB
+AND D~INSNO EQ ' '
+ORDER BY A~ONUMB DESCENDING,
+A~OTURN DESCENDING.
+
+DATA : LV_CHECK, LV_ENABLE.
+
+LOOP AT GT_DISPLAY.
+CLEAR : GS_STYLE, GT_STYLE, GT_STYLE[].
+
+IF GT_DISPLAY-INSNO IS NOT INITIAL.
+LV_CHECK = 'X'.
+_STYLE_DISABLED: 'ENUMB'.
+GT_DISPLAY-STYLE[] = GT_STYLE[].
+*      MODIFY GT_DISPLAY.
+ELSE.
+_STYLE_ENABLED: 'ENUMB'.
+GT_DISPLAY-STYLE[] = GT_STYLE[].
+*      MODIFY GT_DISPLAY.
+LV_CHECK = ''.
+LV_ENABLE = 'X'.
+ENDIF.
+
+IF GT_DISPLAY-OINST EQ 'C'.
+GT_DISPLAY-ICON = ICON_LED_GREEN.
+ELSEIF GT_DISPLAY-OINST EQ 'B'.
+GT_DISPLAY-ICON = ICON_LED_YELLOW.
+ELSE.
+GT_DISPLAY-ICON = ICON_LED_RED.
+ENDIF.
+MODIFY GT_DISPLAY.
+ENDLOOP.
+
+
+
+ENDFORM.
